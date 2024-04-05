@@ -2,7 +2,10 @@ extern crate glutin_window;
 extern crate graphics;
 extern crate opengl_graphics;
 extern crate piston;
+extern crate rand;
 
+pub mod constants;
+mod food;
 mod shape;
 mod snake;
 pub mod types;
@@ -15,8 +18,6 @@ use piston::input::{Button, Key, PressEvent, RenderArgs, RenderEvent, UpdateArgs
 use piston::window::WindowSettings;
 use piston::EventLoop;
 
-const WINDOW_SIZE: [f64; 2] = [200.0, 200.0];
-
 enum GameState {
     Playing,
     GameOver,
@@ -25,6 +26,7 @@ enum GameState {
 pub struct App {
     gl: GlGraphics, // OpenGL drawing backend.
     snake: snake::Snake,
+    food: Option<food::Food>,
     game_area: types::GameArea,
     state: GameState,
     glyphs: GlyphCache<'static>,
@@ -32,7 +34,10 @@ pub struct App {
 
 impl App {
     fn new(gl: GlGraphics) -> App {
-        let (x, y) = (WINDOW_SIZE[0] / 2.0, WINDOW_SIZE[1] / 2.0);
+        let (x, y) = (
+            constants::WINDOW_SIZE[0] / 2.0,
+            constants::WINDOW_SIZE[1] / 2.0,
+        );
 
         let snake = snake::Snake::new(Position { x, y });
         let glyphs = GlyphCache::new("src/fonts/Roboto-Black.ttf", (), TextureSettings::new())
@@ -40,11 +45,12 @@ impl App {
         App {
             gl,
             snake,
+            food: None,
             game_area: types::GameArea {
                 min_x: 0.0,
-                max_x: WINDOW_SIZE[0],
+                max_x: constants::WINDOW_SIZE[0],
                 min_y: 0.0,
-                max_y: WINDOW_SIZE[1],
+                max_y: constants::WINDOW_SIZE[1],
             },
             state: GameState::Playing,
             glyphs,
@@ -61,12 +67,30 @@ impl App {
         }
     }
 
+    fn generate_food(&mut self) {
+        use rand::Rng;
+
+        while let None = self.food {
+            let mut rng = rand::thread_rng();
+            let x = rng.gen_range(0.0..constants::WINDOW_SIZE[0] - constants::SQUARE_SIZE);
+            let y = rng.gen_range(0.0..constants::WINDOW_SIZE[1] - constants::SQUARE_SIZE);
+            let food = food::Food::new(Position { x, y });
+            if self.snake.intersect(&food.square) {
+                continue;
+            }
+            self.food = Some(food::Food::new(Position { x, y }));
+        }
+    }
+
     fn render_playing(&mut self, args: &RenderArgs) {
         const GREEN: [f32; 4] = [0.0, 1.0, 0.0, 1.0];
         self.gl.draw(args.viewport(), |_, gl| {
             // Clear the screen.
             graphics::clear(GREEN, gl);
         });
+        if let Some(food) = self.food.as_ref() {
+            food.render(&mut self.gl, args);
+        }
 
         self.snake.render(&mut self.gl, args);
     }
@@ -86,7 +110,7 @@ impl App {
         let text_height = text_size as f64;
 
         let x = text_size as f64;
-        let y = (WINDOW_SIZE[1] + text_height) / 2.0;
+        let y = (constants::WINDOW_SIZE[1] + text_height) / 2.0;
 
         gl.draw(args.viewport(), |c, gl| {
             // Assuming 'glyphs' is accessible here, and 'self.gl' is your GlGraphics instance
@@ -99,8 +123,6 @@ impl App {
 
     fn update(&mut self, args: &UpdateArgs) {
         // update every 0.2 seconds
-        println!("{}", args.dt);
-
         match self.state {
             GameState::Playing => self.update_playing(),
             GameState::GameOver => self.update_game_over(args),
@@ -108,6 +130,14 @@ impl App {
     }
 
     fn update_playing(&mut self) {
+        if let Some(food) = self.food.as_ref() {
+            if self.snake.intersect(&food.square) {
+                self.snake.grow();
+                self.food = None;
+            }
+        } else {
+            self.generate_food();
+        }
         self.snake.update();
         if self.snake.intersect_wall(&self.game_area) {
             self.state = GameState::GameOver;
@@ -124,7 +154,7 @@ fn main() {
     let opengl = OpenGL::V3_2;
 
     // Create a Glutin window.
-    let mut window: Window = WindowSettings::new("spinning-square", WINDOW_SIZE)
+    let mut window: Window = WindowSettings::new("spinning-square", constants::WINDOW_SIZE)
         .graphics_api(opengl)
         .exit_on_esc(true)
         .build()

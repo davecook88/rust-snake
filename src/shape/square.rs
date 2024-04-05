@@ -1,14 +1,14 @@
 use std::clone;
 
 use crate::{
+    constants,
     shape::{Extremities, HasPosition, HasSize},
-    types::Direction,
-    types::Position,
+    types::{Direction, Position},
 };
 
 pub struct Square {
     position: Position,
-    size: f64,
+    pub size: f64,
 }
 
 impl HasPosition for Square {
@@ -29,7 +29,7 @@ impl Square {
     pub fn new(pos: Position) -> Square {
         Square {
             position: pos,
-            size: 5.0,
+            size: constants::SQUARE_SIZE,
         }
     }
 
